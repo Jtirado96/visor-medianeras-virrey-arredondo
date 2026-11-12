@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+	<title>Muros medianeros – Virrey Arredondo y Enrique Martínez</title>
+	<link rel="stylesheet" type="text/css" href="build/potree/potree.css">
+	<link rel="stylesheet" type="text/css" href="libs/jquery-ui/jquery-ui.min.css">
+	<link rel="stylesheet" type="text/css" href="libs/openlayers3/ol.css">
+	<link rel="stylesheet" type="text/css" href="libs/spectrum/spectrum.css">
+	<link rel="stylesheet" type="text/css" href="libs/jstree/themes/mixed/style.css">
+	<style>
+		#dxfpanel{position:absolute;top:12px;right:12px;z-index:10000;width:290px;background:rgba(25,32,40,.93);color:#eee;
+			font:13px/1.4 system-ui,Segoe UI,Arial,sans-serif;border-radius:8px;box-shadow:0 4px 18px rgba(0,0,0,.45);padding:12px 14px}
+		#dxfpanel h3{margin:0 0 6px;font-size:15px;color:#fff}
+		#dxfpanel p{margin:4px 0 8px;color:#bcc6d0;font-size:12px}
+		#dxfpanel button{width:100%;margin:4px 0;padding:7px 8px;border:0;border-radius:5px;background:#2f6fb3;color:#fff;font-weight:600;cursor:pointer}
+		#dxfpanel button.sec{background:#46525e}
+		#dxfpanel button:disabled{opacity:.5;cursor:default}
+		#dxfpanel label{display:block;margin:3px 0;cursor:pointer}
+		#dxfpanel .row{margin:8px 0}
+		#dxfstatus{margin-top:6px;font-size:12px;color:#ffd27a;min-height:16px}
+		#dxfpanel .min{position:absolute;top:8px;right:10px;cursor:pointer;color:#9aa;font-size:16px}
+		#dxfpanel.collapsed > :not(h3):not(.min){display:none}
+	</style>
+</head>
+<body>
+	<script src="libs/jquery/jquery-3.1.1.min.js"></script>
+	<script src="libs/spectrum/spectrum.js"></script>
+	<script src="libs/jquery-ui/jquery-ui.min.js"></script>
+	<script src="libs/other/BinaryHeap.js"></script>
+	<script src="libs/tween/tween.min.js"></script>
+	<script src="libs/d3/d3.js"></script>
+	<script src="libs/proj4/proj4.js"></script>
+	<script src="libs/openlayers3/ol.js"></script>
+	<script src="libs/i18next/i18next.js"></script>
+	<script src="libs/jstree/jstree.js"></script>
+	<script src="build/potree/potree.js"></script>
+	<script src="libs/plasio/js/laslaz.js"></script>
+
+	<div class="potree_container" style="position:absolute;width:100%;height:100%;left:0;top:0;">
+		<div id="potree_render_area" style="background-image:url('build/potree/resources/images/background.jpg');"></div>
+		<div id="potree_sidebar_container"></div>
+	</div>
+
+	<div id="dxfpanel">
+		<span class="min" id="dxfmin" title="Minimizar">–</span>
+		<h3>Cortes → DXF</h3>
+		<p><b>Corte horizontal</b> (planta a una altura):</p>
+		<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px">
+			<span>Altura</span><input id="inH" type="number" step="0.1" value="1.4" style="width:58px"> m
+			<span>Espesor</span><input id="inT" type="number" step="0.05" value="0.3" style="width:52px"> m
+		</div>
+		<button id="btnHoriz">Crear corte horizontal</button>
+		<p style="font-size:11px">El corte horizontal de todo el predio lee la nube completa: puede tardar 1–2 minutos.</p>
+		<p style="margin-top:10px"><b>Caja libre</b> (alzados o sectores): movela con las flechas, escalala con los cubos y girala con los anillos.</p>
+		<button id="btnBox" class="sec">Agregar caja libre</button>
+		<label><input type="checkbox" id="chkClip" checked> Mostrar solo lo que está dentro de la caja</label>
+		<div class="row">
+			<b>Proyección</b>
+			<label><input type="radio" name="proj" value="planta" checked> Planta (X, Y)</label>
+			<label><input type="radio" name="proj" value="alzado"> Alzado según la caja (distancia, altura)</label>
+			<label><input type="radio" name="proj" value="3d"> 3D (X, Y, Z)</label>
+		</div>
+		<button id="btnDxf">Exportar corte a DXF</button>
+		<button id="btnDel" class="sec">Borrar cajas de corte</button>
+		<div id="dxfstatus"></div>
+	</div>
+
+	<script type="module">
+	import * as THREE from "./libs/three.js/build/three.module.js";
+	const viewer = new Potree.Viewer(document.getElementById("potree_render_area"));
+	window.viewer = viewer;
+	viewer.setEDLEnabled(true);
+	viewer.setFOV(60);
+	viewer.setPointBudget(2_000_000);
+	viewer.setBackground("gradient");
+	viewer.setDescription("Muros medianeros · Virrey Arredondo y Enrique Martínez · relevamiento LiDAR (iPhone), coordenadas locales en metros, densidad 1 cm");
+
+	viewer.loadGUI(() => {
+		viewer.setLanguage('es');
+		$("#menu_tools").next().show();
+		$("#menu_clipping").next().show();
+	});
+
+	let pc = null;
+	Potree.loadPointCloud("pointclouds/medianeras/cloud.js", "Muros medianeros", e => {
+		pc = e.pointcloud;
+		const m = pc.material;
+		m.size = 1;
+		m.pointSizeType = Potree.PointSizeType.ADAPTIVE;
+		m.shape = Potree.PointShape.SQUARE;
+		m.activeAttributeName = "rgba";
+		viewer.scene.addPointCloud(pc);
+		viewer.fitToScreen();
+	});
+
+	const $s = document.getElementById("dxfstatus");
+	const status = t => { $s.textContent = t; };
+	document.getElementById("dxfmin").onclick = () => document.getElementById("dxfpanel").classList.toggle("collapsed");
+
+	function applyClipMode(){
+		const only = document.getElementById("chkClip").checked;
+		for (const v of viewer.scene.volumes) v.clip = only;
+		viewer.setClipTask(only ? Potree.ClipTask.SHOW_INSIDE : Potree.ClipTask.HIGHLIGHT);
+	}
+	document.getElementById("chkClip").onchange = applyClipMode;
+
+	// el suelo del relevamiento está aprox. en z = 0 (coordenadas locales del escaneo)
+	document.getElementById("btnHoriz").onclick = () => {
+		if (!pc) return;
+		const h = parseFloat(document.getElementById("inH").value) || 1.4;
+		const t = Math.max(0.02, parseFloat(document.getElementById("inT").value) || 0.3);
+		const bb = pc.getBoundingBoxWorld();
+		const vol = new Potree.BoxVolume();
+		vol.name = `Corte horizontal h=${h} m`;
+		vol.position.set((bb.min.x + bb.max.x) / 2, (bb.min.y + bb.max.y) / 2, h);
+		vol.scale.set(bb.max.x - bb.min.x + 1, bb.max.y - bb.min.y + 1, t);
+		viewer.scene.addVolume(vol);
+		document.querySelector('input[name=proj][value=planta]').checked = true;
+		applyClipMode();
+		status(`Corte horizontal a ${h} m (espesor ${t} m). Ya podés exportar.`);
+	};
+
+	document.getElementById("btnBox").onclick = () => {
+		if (!pc) return;
+		const bb = pc.getBoundingBoxWorld();
+		// ubicar la caja sobre el muro más cercano al centro de la vista y alinearla con él
+		const t = viewer.scene.view.getPivot();
+		const W = pc.matrixWorld, v = new THREE.Vector3();
+		let best = null, bd = Infinity; const near = [];
+		for (const n of pc.visibleNodes) {
+			const pos = n.sceneNode && n.sceneNode.geometry.attributes.position; if (!pos) continue;
+			const a = pos.array, M = n.sceneNode.matrixWorld;
+			for (let i = 0; i < pos.count; i += 7) {
+				v.set(a[3*i], a[3*i+1], a[3*i+2]).applyMatrix4(M);
+				if (v.z < bb.min.z + 1.2) continue;   // ignorar el piso: buscar muro
+				const d = Math.hypot(v.x - t.x, v.y - t.y);
+				if (d < bd) { bd = d; best = v.clone(); }
+				near.push(v.x, v.y);
+			}
+		}
+		const c = best || t;
+		// dirección del muro: componente principal de los puntos a menos de 2 m
+		let sxx = 0, syy = 0, sxy = 0, mxs = 0, mys = 0, cnt = 0;
+		for (let i = 0; i < near.length; i += 2) { const dx = near[i]-c.x, dy = near[i+1]-c.y; if (dx*dx+dy*dy < 4) { mxs += dx; mys += dy; cnt++; } }
+		if (cnt) { mxs /= cnt; mys /= cnt; }
+		for (let i = 0; i < near.length; i += 2) { const dx = near[i]-c.x-mxs, dy = near[i+1]-c.y-mys; if (dx*dx+dy*dy < 4) { sxx += dx*dx; syy += dy*dy; sxy += dx*dy; } }
+		const ang = cnt > 10 ? 0.5 * Math.atan2(2*sxy, sxx - syy) : 0;
+		const vol = new Potree.BoxVolume();
+		vol.name = "Caja " + (viewer.scene.volumes.length + 1);
+		vol.position.set(c.x, c.y, (bb.min.z + bb.max.z) / 2);
+		vol.rotation.z = ang;
+		vol.scale.set(4, 1.0, (bb.max.z - bb.min.z) + 0.5);
+		viewer.scene.addVolume(vol);
+		viewer.inputHandler.toggleSelection(vol);
+		applyClipMode();
+		try { viewer.zoomTo(vol, 1.6); } catch(e) {}
+		status("Caja agregada. Ubicala y exportá (para alzados elegí «Alzado según la caja»).");
+	};
+
+	document.getElementById("btnDel").onclick = () => {
+		for (const v of [...viewer.scene.volumes]) viewer.scene.removeVolume(v);
+		viewer.setClipTask(Potree.ClipTask.HIGHLIGHT);
+		status("");
+	};
+
+	const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+	async function loadDetail(){
+		// sube el presupuesto de puntos para que cargue el máximo detalle disponible en pantalla
+		const oldBudget = viewer.getPointBudget();
+		const oldMin = pc.minimumNodePixelSize;
+		viewer.setPointBudget(8_000_000);
+		pc.minimumNodePixelSize = 20;
+		let quiet = 0;
+		for (let i = 0; i < 60 && quiet < 4; i++) {
+			await sleep(250);
+			quiet = (Potree.numNodesLoading === 0) ? quiet + 1 : 0;
+			status("Cargando detalle… " + Math.round(i * 2.5) + "%");
+		}
+		return () => { viewer.setPointBudget(oldBudget); pc.minimumNodePixelSize = oldMin; };
+	}
+
+	// Recorre el octree completo y carga (a máxima resolución) todos los nodos que tocan la caja,
+	// sin depender del zoom de la pantalla.
+	async function collect(vol){
+		vol.updateMatrixWorld(true);
+		const inv = new THREE.Matrix4().copy(vol.matrixWorld).invert();
+		const volBox = new THREE.Box3().setFromObject(vol);
+		const W = pc.matrixWorld;
+		const p = new THREE.Vector3(), q = new THREE.Vector3();
+		const out = [];
+		let todo = [pc.pcoGeometry.root], done = 0, it = 0;
+		const handle = n => {
+			const nb = n.boundingBox.clone().applyMatrix4(W);
+			if (!nb.intersectsBox(volBox)) return;
+			const g = n.geometry, pos = g && g.attributes.position;
+			if (pos) {
+				const a = pos.array, off = n.boundingBox.min;
+				for (let i = 0; i < pos.count; i++) {
+					p.set(a[3*i] + off.x, a[3*i+1] + off.y, a[3*i+2] + off.z).applyMatrix4(W);
+					q.copy(p).applyMatrix4(inv);
+					if (Math.abs(q.x) <= 0.5 && Math.abs(q.y) <= 0.5 && Math.abs(q.z) <= 0.5) out.push(p.x, p.y, p.z);
+				}
+			}
+			for (const k in n.children) { const c = n.children[k]; if (c && c.boundingBox.clone().applyMatrix4(W).intersectsBox(volBox)) todo.push(c); }
+			done++;
+		};
+		while (todo.length && it++ < 200000) {
+			const rest = [];
+			for (const n of todo) {
+				if (n.loaded) handle(n);
+				else { if (!n.loading && Potree.numNodesLoading < Potree.maxNodesLoading) { try { n.load(); } catch(e) {} } rest.push(n); }
+			}
+			// (los hijos que agrega handle() se recorren en esta misma pasada del for…of)
+			todo = rest;
+			if (rest.length) await sleep(20);
+			if (it % 25 === 0) status(`Leyendo nodos… ${done} · ${(out.length/3).toLocaleString("es-AR")} puntos`);
+		}
+		return out;
+	}
+
+	function project(pts, vol, mode){
+		const res = new Float64Array(pts.length);
+		if (mode === "alzado") {
+			const ax = new THREE.Vector3(1,0,0).applyQuaternion(vol.quaternion); ax.z = 0; ax.normalize();
+			const half = vol.scale.x / 2, c = vol.position;
+			for (let i = 0; i < pts.length; i += 3) {
+				const u = (pts[i]-c.x)*ax.x + (pts[i+1]-c.y)*ax.y + half;
+				res[i] = u; res[i+1] = pts[i+2]; res[i+2] = 0;
+			}
+		} else if (mode === "planta") {
+			for (let i = 0; i < pts.length; i += 3) { res[i] = pts[i]; res[i+1] = pts[i+1]; res[i+2] = 0; }
+		} else res.set(pts);
+		return res;
+	}
+
+	// raleo a 1 cm (en el plano proyectado, o en 3D) para que el DXF no sea enorme
+	function thin(arr, is3d){
+		const seen = new Set(), keep = [];
+		let mx = Infinity, my = Infinity, mz = Infinity;
+		for (let i = 0; i < arr.length; i += 3) { mx = Math.min(mx, arr[i]); my = Math.min(my, arr[i+1]); mz = Math.min(mz, arr[i+2]); }
+		for (let i = 0; i < arr.length; i += 3) {
+			const ix = Math.floor((arr[i]-mx)*100), iy = Math.floor((arr[i+1]-my)*100), iz = is3d ? Math.floor((arr[i+2]-mz)*100) : 0;
+			const k = (ix * 100000 + iy) * 100000 + iz;
+			if (!seen.has(k)) { seen.add(k); keep.push(arr[i], arr[i+1], arr[i+2]); }
+		}
+		return keep;
+	}
+
+	function dxf(arr, layer){
+		const parts = ["0\nSECTION\n2\nHEADER\n9\n$ACADVER\n1\nAC1009\n9\n$INSUNITS\n70\n6\n0\nENDSEC\n",
+			"0\nSECTION\n2\nTABLES\n0\nTABLE\n2\nLAYER\n70\n1\n0\nLAYER\n2\n"+layer+"\n70\n0\n62\n1\n6\nCONTINUOUS\n0\nENDTAB\n0\nENDSEC\n",
+			"0\nSECTION\n2\nENTITIES\n"];
+		for (let i = 0; i < arr.length; i += 3)
+			parts.push("0\nPOINT\n8\n"+layer+"\n10\n"+arr[i].toFixed(4)+"\n20\n"+arr[i+1].toFixed(4)+"\n30\n"+arr[i+2].toFixed(4)+"\n");
+		parts.push("0\nENDSEC\n0\nEOF\n");
+		return new Blob(parts, {type: "application/dxf"});
+	}
+
+	document.getElementById("btnDxf").onclick = async () => {
+		const vols = viewer.scene.volumes;
+		if (!pc || vols.length === 0) { status("Primero agregá una caja de corte."); return; }
+		const vol = vols[vols.length - 1];
+		const mode = document.querySelector('input[name=proj]:checked').value;
+		const btn = document.getElementById("btnDxf"); btn.disabled = true;
+		try {
+			status("Extrayendo puntos a máxima resolución…"); await sleep(30);
+			const oldMax = Potree.maxNodesLoading; Potree.maxNodesLoading = 12;
+			let pts; try { pts = await collect(vol); } finally { Potree.maxNodesLoading = oldMax; }
+			if (pts.length === 0) { status("No hay puntos dentro de la caja."); return; }
+			const proj = thin(project(pts, vol, mode), mode === "3d");
+			const layer = mode === "planta" ? "CORTE_PLANTA" : mode === "alzado" ? "CORTE_ALZADO" : "CORTE_3D";
+			const blob = dxf(proj, layer);
+			const d = new Date(), z = n => String(n).padStart(2,"0");
+			const name = `corte_${mode}_${d.getFullYear()}${z(d.getMonth()+1)}${z(d.getDate())}_${z(d.getHours())}${z(d.getMinutes())}.dxf`;
+			const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; a.click();
+			setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+			status(`Listo: ${(proj.length/3).toLocaleString("es-AR")} puntos (raleados a 1 cm) → ${name}`);
+		} catch (err) { console.error(err); status("Error al exportar: " + err.message); }
+		finally { btn.disabled = false; }
+	};
+	</script>
+</body>
+</html>
