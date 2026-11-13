@@ -51,8 +51,12 @@
 			<span>Cota Z</span><input id="inH" type="number" step="0.1" value="0.9" style="width:58px"> m
 			<span>Espesor</span><input id="inT" type="number" step="0.05" value="0.3" style="width:52px"> m
 		</div>
-		<button id="btnHoriz">Crear corte horizontal</button>
-		<p style="font-size:11px">El corte horizontal de todo el predio lee la nube completa: puede tardar 1–2 minutos.</p>
+		<p style="margin:6px 0 4px"><b>Trabajar por sectores:</b></p>
+		<button id="btnSector">1 · Marcar sector en planta (2 clics)</button>
+		<button id="btnHorizSector" style="margin-top:4px">2 · Cortar el sector a la cota Z</button>
+		<p style="font-size:11px">Marcá dos esquinas opuestas del sector sobre la vista en planta; después cortalo a la cota indicada y exportá. Sólo se lee esa parte de la nube, así que es rápido.</p>
+		<button id="btnHoriz" class="sec">Corte horizontal de todo el predio</button>
+		<p style="font-size:11px">El corte de todo el predio lee la nube completa: puede tardar 1–2 minutos.</p>
 		<p style="margin-top:10px"><b>Caja libre</b>: se crea horizontal envolviendo toda la nube. Cada cubo de color mueve <i>una sola cara</i> (rojo = X, verde = Y, azul = arriba/abajo); las flechas la trasladan y el anillo azul la gira sobre Z (la base siempre queda horizontal).</p>
 		<button id="btnBox" class="sec">Agregar caja libre</button>
 		<div id="boxlim" style="display:none;margin:6px 0 2px;padding:6px;border:1px solid #445;border-radius:6px">
@@ -113,6 +117,67 @@
 		viewer.setClipTask(only ? Potree.ClipTask.SHOW_INSIDE : Potree.ClipTask.HIGHLIGHT);
 	}
 	document.getElementById("chkClip").onchange = applyClipMode;
+
+	// ---------- sectores: rectángulo en planta marcado con 2 clics ----------
+	const getHT = () => ({
+		h: parseFloat(String(document.getElementById("inH").value).replace(",", ".")) || 0.9,
+		t: Math.max(0.02, parseFloat(String(document.getElementById("inT").value).replace(",", ".")) || 0.3)
+	});
+	let picking = null;   // {pts:[], down:{x,y}}
+	const canvas = viewer.renderer.domElement;
+	function pickXY(ev){
+		const r = canvas.getBoundingClientRect();
+		const mouse = { x: ev.clientX - r.left, y: ev.clientY - r.top };
+		const cam = viewer.scene.getActiveCamera();
+		let p = null;
+		try {
+			const I = Potree.Utils.getMousePointCloudIntersection(mouse, cam, viewer, [pc], { pickClipped: true });
+			if (I && I.location) p = I.location.clone();
+		} catch (e) {}
+		if (!p) {   // sin punto debajo del cursor: intersectar con el plano horizontal del piso
+			const ndc = { x: mouse.x / canvas.clientWidth * 2 - 1, y: -mouse.y / canvas.clientHeight * 2 + 1 };
+			const rc = new THREE.Raycaster(); rc.setFromCamera(ndc, cam);
+			const pl = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0.5);   // z = -0.5
+			p = rc.ray.intersectPlane(pl, new THREE.Vector3());
+		}
+		return p;
+	}
+	canvas.addEventListener("pointerdown", ev => { if (picking && ev.button === 0) picking.down = { x: ev.clientX, y: ev.clientY }; }, true);
+	canvas.addEventListener("pointerup", ev => {
+		if (!picking || ev.button !== 0 || !picking.down) return;
+		const moved = Math.hypot(ev.clientX - picking.down.x, ev.clientY - picking.down.y); picking.down = null;
+		if (moved > 5) return;                       // fue un arrastre de cámara, no un clic
+		const p = pickXY(ev); if (!p) return;
+		picking.pts.push(p);
+		if (picking.pts.length === 1) { status("Esquina 1 marcada. Ahora hacé clic en la esquina opuesta del sector."); return; }
+		const [a, b] = picking.pts; picking = null; canvas.style.cursor = "";
+		const tb = pc.pcoGeometry.tightBoundingBox, bb = tb ? tb.clone().applyMatrix4(pc.matrixWorld) : pc.getBoundingBoxWorld();
+		const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x), y0 = Math.min(a.y, b.y), y1 = Math.max(a.y, b.y);
+		if (x1 - x0 < 0.1 || y1 - y0 < 0.1) { status("El sector es demasiado chico; volvé a marcarlo."); return; }
+		const vol = new Potree.BoxVolume();
+		vol.name = "Sector " + (viewer.scene.volumes.length + 1);
+		vol.position.set((x0 + x1) / 2, (y0 + y1) / 2, (bb.min.z + bb.max.z) / 2);
+		vol.scale.set(x1 - x0, y1 - y0, bb.max.z - bb.min.z + 0.4);
+		viewer.scene.addVolume(vol);
+		viewer.inputHandler.toggleSelection(vol);
+		applyClipMode(); lastSync = "";
+		status(`Sector marcado (${fmt(x1 - x0)} × ${fmt(y1 - y0)} m). Ajustalo si querés y tocá «2 · Cortar el sector a la cota Z».`);
+	}, true);
+	document.getElementById("btnSector").onclick = () => {
+		if (!pc) return;
+		viewer.setTopView();
+		picking = { pts: [], down: null }; canvas.style.cursor = "crosshair";
+		status("Vista en planta. Hacé clic en una esquina del sector (podés acercar con la rueda antes de marcar).");
+	};
+	document.getElementById("btnHorizSector").onclick = () => {
+		const v = currentBox();
+		if (!v) { status("Primero marcá un sector (paso 1) o agregá una caja."); return; }
+		const { h, t } = getHT();
+		v.position.z = h; v.scale.z = t; v.name = `${v.name.split(" · ")[0]} · Z=${h}`;
+		document.querySelector('input[name=proj][value=planta]').checked = true;
+		applyClipMode(); lastSync = "";
+		status(`Sector cortado a cota ${h} m (espesor ${t} m). Ya podés exportar a DXF.`);
+	};
 
 	// coordenadas ET: el piso está aprox. en z = -0.5
 	document.getElementById("btnHoriz").onclick = () => {
@@ -292,9 +357,8 @@
 	}
 
 	document.getElementById("btnDxf").onclick = async () => {
-		const vols = viewer.scene.volumes;
-		if (!pc || vols.length === 0) { status("Primero agregá una caja de corte."); return; }
-		const vol = vols[vols.length - 1];
+		const vol = currentBox();
+		if (!pc || !vol) { status("Primero agregá una caja o marcá un sector."); return; }
 		const mode = document.querySelector('input[name=proj]:checked').value;
 		const btn = document.getElementById("btnDxf"); btn.disabled = true;
 		try {
