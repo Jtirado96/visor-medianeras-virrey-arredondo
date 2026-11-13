@@ -39,9 +39,28 @@
 	.crow .cname{font-weight:600;flex:0 0 auto}
 	.crow .cz{flex:1;opacity:.8}
 	#dxfpanel .crow .cdel{width:auto;flex:0 0 auto;padding:1px 7px;margin:0;background:#5a2a2a;font-size:12px}
+		#btnTour{position:absolute;top:12px;left:60px;z-index:10001;padding:8px 14px;border:0;border-radius:6px;background:#e8a317;color:#111;
+			font:700 13px system-ui,Segoe UI,Arial,sans-serif;letter-spacing:.5px;cursor:pointer;box-shadow:0 3px 12px rgba(0,0,0,.45)}
+		#btnTour:hover{background:#ffb928}
+		#tourHl{position:fixed;z-index:10002;border:3px solid #e8a317;border-radius:8px;pointer-events:none;
+			box-shadow:0 0 0 9999px rgba(0,0,0,.55);transition:all .25s ease}
+		#tourBox{position:fixed;z-index:10003;width:330px;background:#fff;color:#1d2329;border-radius:10px;padding:14px 16px 12px;
+			font:14px/1.45 system-ui,Segoe UI,Arial,sans-serif;box-shadow:0 8px 30px rgba(0,0,0,.5);transition:left .25s ease, top .25s ease}
+		#tourBox h4{margin:0 0 6px;font-size:16px;color:#0f3d6e}
+		#tourBox ul{margin:6px 0 0 18px;padding:0}
+		#tourBox li{margin:2px 0}
+		#tourBox .tnav{display:flex;align-items:center;gap:8px;margin-top:12px}
+		#tourBox .tnav span{flex:1;font-size:12px;color:#6b7680}
+		#tourBox button{border:0;border-radius:5px;padding:6px 12px;font-weight:600;cursor:pointer;background:#e3e8ee;color:#1d2329}
+		#tourBox button.pri{background:#2f6fb3;color:#fff}
+		#tourBox .tx{position:absolute;top:6px;right:10px;background:none;padding:2px 6px;font-size:16px;color:#8a949e}
 	</style>
 </head>
 <body>
+	<button id="btnTour">VER TUTORIAL</button>
+	<div id="tourHl" style="display:none"></div>
+	<div id="tourBox" style="display:none"></div>
+
 	<script src="libs/jquery/jquery-3.1.1.min.js"></script>
 	<script src="libs/spectrum/spectrum.js"></script>
 	<script src="libs/jquery-ui/jquery-ui.min.js"></script>
@@ -64,7 +83,7 @@
 		<span class="min" id="dxfmin" title="Minimizar">–</span>
 		<h3>Cortes → DXF</h3>
 		<div class="pbody">
-			<div class="sec-box">
+			<div id="secCota" class="sec-box">
 				<div class="sec-t">Cota del corte</div>
 				<div style="display:flex;gap:6px;align-items:center">
 					<span style="white-space:nowrap">Cota Z</span><input id="inH" type="number" step="0.1" value="0.9" style="width:58px"> m
@@ -76,34 +95,34 @@
 					<p style="margin:0">Mové el corte con este control o con <b>Shift + rueda</b> sobre la nube (1 cm; Shift + Alt: 10 cm).</p>
 				</div>
 			</div>
-			<div class="sec-box accent">
+			<div id="secTramos" class="sec-box accent">
 				<div class="sec-t">Trabajar por tramos de muro</div>
 				<p>Mirando el muro de frente, hacé clic sobre la pared donde empieza y donde termina el tramo. Se crea una caja alineada con el muro (1 m de profundidad); después cortala a la cota y exportá. Sólo se lee esa parte de la nube.</p>
 				<button id="btnSector">1 · Marcar tramo de muro (2 clics)</button>
 				<button id="btnHorizSector">2 · Cortar el tramo a la cota Z</button>
 			</div>
-			<div class="sec-box">
+			<div id="secPredio" class="sec-box">
 				<div class="sec-t">Todo el predio</div>
 				<button id="btnHoriz" class="sec">Corte horizontal de todo el predio</button>
 				<p style="margin:2px 0 0">Lee la nube completa: puede tardar 1–2 minutos.</p>
 			</div>
-			<div class="sec-box">
+			<div id="secCortes" class="sec-box">
 				<div class="sec-t">Cortes <span style="font-weight:400;font-size:11px;opacity:.8">(el marcado se edita y se exporta)</span></div>
 				<div id="cortes"></div>
 				<button id="btnDel" class="sec" title="Borra todos los cortes">Borrar todos los cortes</button>
 				<label><input type="checkbox" id="chkClip" checked> Mostrar solo lo que está dentro del corte</label>
 			</div>
-			<div class="sec-box">
+			<div id="secCapas" class="sec-box">
 				<div class="sec-t">Capas</div>
 				<label><input type="checkbox" id="chkPts"> Puntos de estación total (DWG) con número</label>
 			</div>
-			<div class="sec-box">
+			<div id="secProy" class="sec-box">
 				<div class="sec-t">Proyección</div>
 				<label style="display:inline-block;margin-right:14px"><input type="radio" name="proj" value="planta" checked> Planta XY</label>
 				<label style="display:inline-block"><input type="radio" name="proj" value="3d"> 3D</label>
 			</div>
 		</div>
-		<div class="pfoot">
+		<div class="pfoot" id="secExport">
 			<button id="btnDxf">Exportar corte a DXF</button>
 			<div id="dxfstatus"></div>
 		</div>
@@ -147,6 +166,60 @@
 		viewer.setClipTask(only ? Potree.ClipTask.SHOW_INSIDE : Potree.ClipTask.HIGHLIGHT);
 	}
 	document.getElementById("chkClip").onchange = applyClipMode;
+
+
+	// ---------- tutorial guiado ----------
+	const TOUR = [
+		{ t: "Bienvenido al visor", h: `Nube de puntos de los muros medianeros de <b>Virrey Arredondo 3345</b>, relevada con LiDAR y ajustada a las <b>coordenadas de la estación total</b> (Z vinculada a PV1–PV4), con 1 punto cada 1 cm.<br><br>Este tutorial recorre cada parte del visor. Podés salir cuando quieras con ✕ o la tecla Esc.` },
+		{ t: "Moverse por la nube", h: `<ul><li><b>Clic izquierdo + arrastrar:</b> girar.</li><li><b>Clic derecho + arrastrar:</b> desplazar.</li><li><b>Rueda:</b> acercar o alejar hacia el punto que está bajo el cursor; podés llegar hasta la pared.</li><li><b>Doble clic</b> sobre la nube: centrar la vista en ese punto.</li></ul>` },
+		{ el: "secCota", t: "1 · Cota del corte", h: `Escribí la <b>cota Z</b> (en el sistema de la estación total; el piso está aprox. en −0,5) y el <b>espesor</b> de la faja que querés cortar.<br><br>Cuando ya hay un corte hecho aparece un <b>deslizador</b> para subirlo o bajarlo de a 1 cm. También podés usar <b>Shift + rueda</b> sobre la nube (Shift + Alt: de a 10 cm).` },
+		{ el: "secTramos", t: "2 · Trabajar por tramos de muro", h: `Es la forma recomendada de trabajar:<ul><li>Ubicate mirando el muro de frente.</li><li><b>Paso 1:</b> hacé clic sobre la pared donde empieza el tramo y donde termina. Se crea una caja alineada con el muro.</li><li><b>Paso 2:</b> la caja se reduce a la cota y espesor indicados.</li></ul>Sólo se lee esa parte de la nube, así que exportar es rápido.` },
+		{ el: "secPredio", t: "3 · Corte de todo el predio", h: `Hace el corte horizontal a la cota indicada sobre <b>todos</b> los muros juntos. Lee la nube completa, así que la exportación puede tardar 1–2 minutos.` },
+		{ el: "secCortes", t: "4 · Lista de cortes", h: `Acá aparecen todos los cortes que hiciste. El que está <b>marcado en verde</b> es el que se edita y el que se exporta; para cambiarlo, hacé clic en su fila.<ul><li><b>✕</b> borra ese corte.</li><li><b>Borrar todos los cortes</b> limpia la lista.</li><li>«Mostrar solo lo que está dentro del corte» oculta el resto de la nube.</li></ul>` },
+		{ el: "secCapas", t: "5 · Capas", h: `Prendé o apagá los <b>puntos de la estación total</b> del DWG con su número. Los PV y PF se ven en amarillo. Pasá el mouse sobre un número para ver sus coordenadas X, Y, Z.` },
+		{ el: "secProy", t: "6 · Proyección del DXF", h: `<ul><li><b>Planta XY:</b> los puntos del corte proyectados en planta (Z = 0).</li><li><b>3D:</b> los puntos con sus tres coordenadas.</li></ul>En ambos casos el DXF sale en coordenadas de estación total, listo para superponer con el plano.` },
+		{ el: "secExport", t: "7 · Exportar a DXF", h: `El botón indica qué corte se va a exportar. Al tocarlo, el visor lee los puntos a máxima resolución (1 cm) y descarga el archivo DXF. Abajo se muestra el avance.` },
+		{ el: "dxfmin", t: "Listo", h: `Con <b>–</b> podés minimizar el panel para ver mejor la nube.<br><br>Podés volver a ver este tutorial cuando quieras con el botón <b>VER TUTORIAL</b>.` },
+	];
+	let tourI = -1;
+	const tHl = document.getElementById("tourHl"), tBox = document.getElementById("tourBox");
+	function tourShow(i){
+		tourI = i; const st = TOUR[i];
+		const panel = document.getElementById("dxfpanel");
+		if (st.el) panel.classList.remove("collapsed");
+		tBox.innerHTML = `<button class="tx" title="Salir">✕</button><h4>${st.t}</h4><div>${st.h}</div>
+			<div class="tnav"><span>${i + 1} de ${TOUR.length}</span>
+			${i > 0 ? '<button class="tp">Anterior</button>' : ""}
+			<button class="pri tn">${i < TOUR.length - 1 ? "Siguiente" : "Terminar"}</button></div>`;
+		tBox.querySelector(".tx").onclick = tourEnd;
+		tBox.querySelector(".tn").onclick = () => i < TOUR.length - 1 ? tourShow(i + 1) : tourEnd();
+		const tp = tBox.querySelector(".tp"); if (tp) tp.onclick = () => tourShow(i - 1);
+		tBox.style.display = "";
+		const el = st.el && document.getElementById(st.el);
+		if (el) { el.scrollIntoView({ block: "nearest" }); }
+		requestAnimationFrame(() => tourPlace(el));
+	}
+	function tourPlace(el){
+		const W = innerWidth, H = innerHeight, bw = tBox.offsetWidth, bh = tBox.offsetHeight;
+		if (!el) {
+			tHl.style.display = "";
+			Object.assign(tHl.style, { left: (W/2 - bw/2 - 6) + "px", top: (H/2 - bh/2 - 6) + "px", width: (bw + 12) + "px", height: (bh + 12) + "px", borderColor: "transparent" });
+			tBox.style.left = (W/2 - bw/2) + "px"; tBox.style.top = (H/2 - bh/2) + "px"; return;
+		}
+		const r = el.getBoundingClientRect(), pad = 4;
+		tHl.style.display = "";
+		Object.assign(tHl.style, { left: (r.left - pad) + "px", top: (r.top - pad) + "px", width: (r.width + 2*pad) + "px", height: (r.height + 2*pad) + "px", borderColor: "#e8a317" });
+		let x = r.left - bw - 18, y = r.top + r.height/2 - bh/2;
+		if (x < 8) { x = Math.min(W - bw - 8, Math.max(8, r.left)); y = r.bottom + 14; }
+		y = Math.max(8, Math.min(H - bh - 8, y));
+		tBox.style.left = x + "px"; tBox.style.top = y + "px";
+	}
+	function tourEnd(){ tourI = -1; tBox.style.display = "none"; tHl.style.display = "none"; }
+	document.getElementById("btnTour").onclick = () => tourShow(0);
+	addEventListener("keydown", e => { if (tourI < 0) return;
+		if (e.key === "Escape") tourEnd(); else if (e.key === "ArrowRight") tBox.querySelector(".tn").click(); else if (e.key === "ArrowLeft" && tourI > 0) tourShow(tourI - 1); });
+	addEventListener("resize", () => { if (tourI >= 0) tourPlace(TOUR[tourI].el && document.getElementById(TOUR[tourI].el)); });
+	document.querySelector("#dxfpanel .pbody").addEventListener("scroll", () => { if (tourI >= 0) tourPlace(TOUR[tourI].el && document.getElementById(TOUR[tourI].el)); });
 
 	// ---------- capa: puntos de estación total del DWG ----------
 	const etGroup = new THREE.Group(); etGroup.visible = false; viewer.scene.scene.add(etGroup);
