@@ -51,6 +51,10 @@
 			<span>Cota Z</span><input id="inH" type="number" step="0.1" value="0.9" style="width:58px"> m
 			<span>Espesor</span><input id="inT" type="number" step="0.05" value="0.3" style="width:52px"> m
 		</div>
+		<div id="zslide" style="display:none;margin:2px 0 6px">
+			<input id="inHr" type="range" min="-1" max="5.8" step="0.01" value="0.9" style="width:100%">
+			<div style="font-size:11px;opacity:.8">Mové el corte con este control o con <b>Shift + rueda</b> sobre la nube (1 cm por paso; Shift + Alt: 10 cm). También con la flecha azul de la caja.</div>
+		</div>
 		<p style="margin:6px 0 4px"><b>Trabajar por sectores:</b></p>
 		<button id="btnSector">1 · Marcar tramo de muro (2 clics)</button>
 		<button id="btnHorizSector" style="margin-top:4px">2 · Cortar el tramo a la cota Z</button>
@@ -128,7 +132,7 @@
 
 	// ---------- zoom hacia el punto bajo el cursor (permite acercarse hasta la pared) ----------
 	viewer.renderer.domElement.addEventListener("wheel", ev => {
-		if (!pc || viewer.getControls() !== viewer.orbitControls) return;
+		if (!pc || ev.shiftKey || viewer.getControls() !== viewer.orbitControls) return;
 		ev.preventDefault(); ev.stopImmediatePropagation();
 		const cnv = viewer.renderer.domElement, r = cnv.getBoundingClientRect();
 		const mouse = { x: ev.clientX - r.left, y: ev.clientY - r.top };
@@ -206,7 +210,7 @@
 		const v = currentBox();
 		if (!v) { status("Primero marcá un tramo (paso 1) o agregá una caja."); return; }
 		const { h, t } = getHT();
-		v.position.z = h; v.scale.z = t; v.name = `${v.name.split(" · ")[0]} · Z=${h}`;
+		v.position.z = h; v.scale.z = t; v.name = `${v.name.split(" · ")[0]} · Z=${h}`; v.userData.corte = true;
 		document.querySelector('input[name=proj][value=planta]').checked = true;
 		applyClipMode(); lastSync = "";
 		status(`Tramo cortado a cota ${h} m (espesor ${t} m). Ya podés exportar a DXF.`);
@@ -222,6 +226,7 @@
 		vol.name = `Corte horizontal Z=${h} m`;
 		vol.position.set((bb.min.x + bb.max.x) / 2, (bb.min.y + bb.max.y) / 2, h);
 		vol.scale.set(bb.max.x - bb.min.x + 1, bb.max.y - bb.min.y + 1, t);
+		vol.userData.corte = true;
 		viewer.scene.addVolume(vol);
 		document.querySelector('input[name=proj][value=planta]').checked = true;
 		applyClipMode();
@@ -238,7 +243,10 @@
 			tt.pickVolumes = tt.pickVolumes.filter(pv => { for (let o = pv; o; o = o.parent) if (o === node) return false; return true; });
 		}
 		viewer.addEventListener("update", () => {
-			for (const v of viewer.scene.volumes) { if (v.rotation.x || v.rotation.y) { v.rotation.x = 0; v.rotation.y = 0; } }
+			for (const v of viewer.scene.volumes) {
+				if (v.rotation.x || v.rotation.y) { v.rotation.x = 0; v.rotation.y = 0; }
+				v.showVolumeLabel = false; if (v.label) v.label.visible = false;   // sin etiqueta de volumen/área
+			}
 			const cam = viewer.scene.getActiveCamera();   // plano de recorte cercano chico: poder acercarse a la pared
 			if (cam.isPerspectiveCamera && cam.near > 0.03) cam.near = 0.03;
 			syncBoxInputs();
@@ -263,7 +271,31 @@
 		set("bxZ0", v.position.z - v.scale.z / 2); set("bxZ1", v.position.z + v.scale.z / 2);
 		set("bxW", v.scale.x); set("bxD", v.scale.y);
 		set("bxR", ((v.rotation.z * 180 / Math.PI) % 360 + 360) % 360);
+		const zs = document.getElementById("zslide");
+		if (v.userData.corte) {
+			zs.style.display = "";
+			set("inH", v.position.z); set("inT", v.scale.z);
+			const r = document.getElementById("inHr"); if (r !== act) r.value = v.position.z;
+		} else zs.style.display = "none";
 	}
+	// mover la cota del corte con el mouse
+	function moveCut(z){
+		const v = currentBox(); if (!v || !v.userData.corte) return;
+		v.position.z = Math.round(z * 100) / 100;
+		v.name = `${v.name.split(" · ")[0]} · Z=${fmt(v.position.z)}`;
+		status(`Corte a cota ${fmt(v.position.z)} m (espesor ${fmt(v.scale.z)} m).`);
+	}
+	document.getElementById("inHr").addEventListener("input", e => moveCut(parseFloat(e.target.value)));
+	document.getElementById("inH").addEventListener("change", e => {
+		const z = parseFloat(String(e.target.value).replace(",", ".")); if (isFinite(z)) moveCut(z);
+	});
+	viewer.renderer.domElement.addEventListener("wheel", ev => {
+		if (!ev.shiftKey) return;
+		const v = currentBox(); if (!v || !v.userData.corte) return;
+		ev.preventDefault(); ev.stopImmediatePropagation();
+		const d = (ev.deltaY || ev.deltaX) < 0 ? 1 : -1;
+		moveCut(v.position.z + d * (ev.altKey ? 0.10 : 0.01));
+	}, { capture: true, passive: false });
 	document.getElementById("btnBoxApply").onclick = () => {
 		const v = currentBox(); if (!v) return;
 		const g = id => parseFloat(document.getElementById(id).value.replace(",", "."));
