@@ -46,9 +46,9 @@
 	<div id="dxfpanel">
 		<span class="min" id="dxfmin" title="Minimizar">–</span>
 		<h3>Cortes → DXF</h3>
-		<p><b>Corte horizontal</b> (planta a una altura):</p>
+		<p><b>Corte horizontal</b> (planta a una cota Z del sistema ET; piso ≈ −0,5):</p>
 		<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px">
-			<span>Altura</span><input id="inH" type="number" step="0.1" value="1.4" style="width:58px"> m
+			<span>Cota Z</span><input id="inH" type="number" step="0.1" value="0.9" style="width:58px"> m
 			<span>Espesor</span><input id="inT" type="number" step="0.05" value="0.3" style="width:52px"> m
 		</div>
 		<button id="btnHoriz">Crear corte horizontal</button>
@@ -75,7 +75,7 @@
 	viewer.setFOV(60);
 	viewer.setPointBudget(2_000_000);
 	viewer.setBackground("gradient");
-	viewer.setDescription("Muros medianeros · Virrey Arredondo y Enrique Martínez · relevamiento LiDAR (iPhone), coordenadas locales en metros, densidad 1 cm");
+	viewer.setDescription("Muros medianeros · Virrey Arredondo y Enrique Martínez · relevamiento LiDAR (iPhone), coordenadas de estación total (sistema local ET), Z vinculada a PV1–PV4, densidad 1 cm");
 
 	viewer.loadGUI(() => {
 		viewer.setLanguage('es');
@@ -106,20 +106,20 @@
 	}
 	document.getElementById("chkClip").onchange = applyClipMode;
 
-	// el suelo del relevamiento está aprox. en z = 0 (coordenadas locales del escaneo)
+	// coordenadas ET: el piso está aprox. en z = -0.5
 	document.getElementById("btnHoriz").onclick = () => {
 		if (!pc) return;
-		const h = parseFloat(document.getElementById("inH").value) || 1.4;
+		const h = parseFloat(document.getElementById("inH").value) || 0.9;
 		const t = Math.max(0.02, parseFloat(document.getElementById("inT").value) || 0.3);
 		const bb = pc.getBoundingBoxWorld();
 		const vol = new Potree.BoxVolume();
-		vol.name = `Corte horizontal h=${h} m`;
+		vol.name = `Corte horizontal Z=${h} m`;
 		vol.position.set((bb.min.x + bb.max.x) / 2, (bb.min.y + bb.max.y) / 2, h);
 		vol.scale.set(bb.max.x - bb.min.x + 1, bb.max.y - bb.min.y + 1, t);
 		viewer.scene.addVolume(vol);
 		document.querySelector('input[name=proj][value=planta]').checked = true;
 		applyClipMode();
-		status(`Corte horizontal a ${h} m (espesor ${t} m). Ya podés exportar.`);
+		status(`Corte horizontal a cota ${h} m (espesor ${t} m). Ya podés exportar.`);
 	};
 
 	document.getElementById("btnBox").onclick = () => {
