@@ -29,6 +29,10 @@
 		#dxfpanel .sec-t{font-weight:700;color:#fff;margin-bottom:4px}
 		#dxfpanel .sec-box p{margin:2px 0 6px}
 		#cortes{max-height:140px;overflow:auto;margin-bottom:2px}
+		#etlabels{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;overflow:hidden;z-index:5}
+		#etlabels div{position:absolute;transform:translate(6px,-50%);font:600 11px system-ui,Arial,sans-serif;color:#fff;
+			text-shadow:0 0 3px #000,0 0 2px #000;white-space:nowrap;pointer-events:auto;cursor:default}
+		#etlabels div.pv{color:#ffd23f}
 	.crow{display:flex;align-items:center;gap:6px;padding:3px 4px;border-radius:5px;cursor:pointer;font-size:12px}
 	.crow:hover{background:rgba(255,255,255,.06)}
 	.crow.on{background:rgba(0,255,0,.12);outline:1px solid rgba(0,255,0,.35)}
@@ -90,6 +94,10 @@
 				<label><input type="checkbox" id="chkClip" checked> Mostrar solo lo que está dentro del corte</label>
 			</div>
 			<div class="sec-box">
+				<div class="sec-t">Capas</div>
+				<label><input type="checkbox" id="chkPts"> Puntos de estación total (DWG) con número</label>
+			</div>
+			<div class="sec-box">
 				<div class="sec-t">Proyección</div>
 				<label style="display:inline-block;margin-right:14px"><input type="radio" name="proj" value="planta" checked> Planta XY</label>
 				<label style="display:inline-block"><input type="radio" name="proj" value="3d"> 3D</label>
@@ -139,6 +147,38 @@
 		viewer.setClipTask(only ? Potree.ClipTask.SHOW_INSIDE : Potree.ClipTask.HIGHLIGHT);
 	}
 	document.getElementById("chkClip").onchange = applyClipMode;
+
+	// ---------- capa: puntos de estación total del DWG ----------
+	const etGroup = new THREE.Group(); etGroup.visible = false; viewer.scene.scene.add(etGroup);
+	const etLab = document.createElement("div"); etLab.id = "etlabels"; etLab.style.display = "none";
+	document.getElementById("potree_render_area").appendChild(etLab);
+	let etPts = [];
+	fetch("puntos_et.json").then(r => r.json()).then(list => {
+		const gW = new THREE.SphereGeometry(0.035, 12, 8), gP = new THREE.SphereGeometry(0.06, 14, 10);
+		const mW = new THREE.MeshBasicMaterial({ color: 0x29d3ff, depthTest: false });
+		const mP = new THREE.MeshBasicMaterial({ color: 0xffd23f, depthTest: false });
+		for (const [n, x, y, z] of list) {
+			const ctl = /^(PV|PF|N$)/.test(n);
+			const m = new THREE.Mesh(ctl ? gP : gW, ctl ? mP : mW); m.position.set(x, y, z); m.renderOrder = 998; etGroup.add(m);
+			const d = document.createElement("div"); d.textContent = n; if (ctl) d.className = "pv";
+			d.title = `${n}  X ${x.toFixed(3)}  Y ${y.toFixed(3)}  Z ${z.toFixed(3)}`;
+			etLab.appendChild(d); etPts.push({ p: new THREE.Vector3(x, y, z), d });
+		}
+	}).catch(e => console.warn("puntos_et.json", e));
+	document.getElementById("chkPts").onchange = e => {
+		etGroup.visible = e.target.checked; etLab.style.display = e.target.checked ? "" : "none";
+	};
+	(function loopLabels(){
+		requestAnimationFrame(loopLabels);
+		if (!etGroup.visible || !etPts.length) return;
+		const cam = viewer.scene.getActiveCamera(), el = viewer.renderer.domElement;
+		const w = el.clientWidth, h = el.clientHeight, v = new THREE.Vector3();
+		for (const e of etPts) {
+			v.copy(e.p).project(cam);
+			if (v.z > 1 || v.z < -1 || v.x < -1.05 || v.x > 1.05 || v.y < -1.05 || v.y > 1.05) { e.d.style.display = "none"; continue; }
+			e.d.style.display = ""; e.d.style.left = ((v.x + 1) / 2 * w) + "px"; e.d.style.top = ((1 - v.y) / 2 * h) + "px";
+		}
+	})();
 
 	// marcadores temporales de los clics
 	const markers = [];

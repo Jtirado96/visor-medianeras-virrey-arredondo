@@ -12,6 +12,7 @@ No incluye Medianera5.
 - *Por tramos de muro*: «1 · Marcar tramo de muro» (dos clics sobre la pared, desde cualquier vista) crea una caja alineada con el muro; «2 · Cortar el tramo a la cota Z» la reduce a la faja de corte. Sólo se lee esa parte de la nube.
 - *Mover el corte*: una vez cortado, la cota se cambia con el control deslizante, con Shift + rueda (1 cm; Shift + Alt: 10 cm) o con la flecha azul de la caja.
 - *Lista de cortes*: el corte marcado (verde) es el que se edita y se exporta; el botón de exportar muestra su nombre. Cada corte se borra con su ✕.
+- *Capa de puntos ET*: casilla «Puntos de estación total (DWG) con número» en Capas; muestra los 112 puntos de `V Arredondo 3345.dwg` con su número (PV/PF en amarillo). Pasando el mouse sobre el número se ven sus coordenadas.
 - *Zoom*: la rueda acerca hacia el punto bajo el cursor, hasta pocos centímetros de la pared.
 - *Corte horizontal de todo el predio*: planta a la cota Z (ET) y espesor elegidos (piso ≈ −0,5 m).
 - Proyecciones: Planta XY o 3D.
