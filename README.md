@@ -10,7 +10,7 @@ No incluye Medianera5.
 
 **Cortes → DXF** (panel arriba a la derecha):
 - *Corte horizontal*: planta a la cota Z (ET) y espesor elegidos (piso ≈ −0,5 m).
-- *Caja libre*: para alzados o sectores; se mueve, escala y gira con los controles.
+- *Caja libre*: se crea horizontal envolviendo toda la nube; cada cubo de color mueve una sola cara (X, Y, arriba/abajo) y sólo gira sobre Z, así la base queda siempre horizontal. También se puede fijar Z inferior/superior, ancho, profundidad y giro con valores.
 - Proyecciones: Planta (X, Y), Alzado según la caja (distancia, altura) o 3D.
 - El DXF se genera en el navegador a máxima resolución disponible (1 cm), raleado a 1 cm, como puntos en capa `CORTE_*`.
 

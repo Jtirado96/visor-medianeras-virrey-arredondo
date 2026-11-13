@@ -53,8 +53,16 @@
 		</div>
 		<button id="btnHoriz">Crear corte horizontal</button>
 		<p style="font-size:11px">El corte horizontal de todo el predio lee la nube completa: puede tardar 1–2 minutos.</p>
-		<p style="margin-top:10px"><b>Caja libre</b> (alzados o sectores): movela con las flechas, escalala con los cubos y girala con los anillos.</p>
+		<p style="margin-top:10px"><b>Caja libre</b>: se crea horizontal envolviendo toda la nube. Cada cubo de color mueve <i>una sola cara</i> (rojo = X, verde = Y, azul = arriba/abajo); las flechas la trasladan y el anillo azul la gira sobre Z (la base siempre queda horizontal).</p>
 		<button id="btnBox" class="sec">Agregar caja libre</button>
+		<div id="boxlim" style="display:none;margin:6px 0 2px;padding:6px;border:1px solid #445;border-radius:6px">
+			<div style="display:grid;grid-template-columns:auto 64px auto 64px;gap:4px 6px;align-items:center">
+				<span>Z inferior</span><input id="bxZ0" type="text"><span>Z superior</span><input id="bxZ1" type="text">
+				<span>Ancho (X)</span><input id="bxW" type="text"><span>Prof. (Y)</span><input id="bxD" type="text">
+				<span>Giro (°)</span><input id="bxR" type="text">
+			</div>
+			<button id="btnBoxApply" class="sec" style="margin-top:6px">Aplicar valores a la caja</button>
+		</div>
 		<label><input type="checkbox" id="chkClip" checked> Mostrar solo lo que está dentro de la caja</label>
 		<div class="row">
 			<b>Proyección</b>
@@ -122,41 +130,65 @@
 		status(`Corte horizontal a cota ${h} m (espesor ${t} m). Ya podés exportar.`);
 	};
 
+	// caja libre: base paralela al plano XY; sólo puede girar alrededor de Z
+	(function lockBoxRotation(){
+		const tt = viewer.transformationTool;
+		for (const k of ["rotation.x", "rotation.y"]) {
+			const node = tt.rotationHandles[k].node;
+			node.setOpacity = () => {};            // ocultar para siempre los anillos X e Y
+			node.traverse(o => { o.visible = false; });
+			tt.pickVolumes = tt.pickVolumes.filter(pv => { for (let o = pv; o; o = o.parent) if (o === node) return false; return true; });
+		}
+		viewer.addEventListener("update", () => {
+			for (const v of viewer.scene.volumes) { if (v.rotation.x || v.rotation.y) { v.rotation.x = 0; v.rotation.y = 0; } }
+			syncBoxInputs();
+		});
+	})();
+
+	function currentBox(){
+		const sel = viewer.inputHandler.selection.find(o => o instanceof Potree.BoxVolume);
+		if (sel) return sel;
+		const vs = viewer.scene.volumes; return vs.length ? vs[vs.length - 1] : null;
+	}
+	const fmt = x => x.toFixed(2);
+	let lastSync = "";
+	function syncBoxInputs(){
+		const v = currentBox(), el = document.getElementById("boxlim");
+		if (!v) { el.style.display = "none"; lastSync = ""; return; }
+		el.style.display = "";
+		const key = [v.uuid, v.position.x, v.position.y, v.position.z, v.scale.x, v.scale.y, v.scale.z, v.rotation.z].join();
+		if (key === lastSync) return; lastSync = key;
+		const act = document.activeElement;
+		const set = (id, val) => { const i = document.getElementById(id); if (i !== act) i.value = fmt(val); };
+		set("bxZ0", v.position.z - v.scale.z / 2); set("bxZ1", v.position.z + v.scale.z / 2);
+		set("bxW", v.scale.x); set("bxD", v.scale.y);
+		set("bxR", ((v.rotation.z * 180 / Math.PI) % 360 + 360) % 360);
+	}
+	document.getElementById("btnBoxApply").onclick = () => {
+		const v = currentBox(); if (!v) return;
+		const g = id => parseFloat(document.getElementById(id).value.replace(",", "."));
+		let z0 = g("bxZ0"), z1 = g("bxZ1"); if (!(z1 > z0)) { status("La Z superior debe ser mayor que la inferior."); return; }
+		v.position.z = (z0 + z1) / 2; v.scale.z = z1 - z0;
+		const w = g("bxW"), d = g("bxD"), r = g("bxR");
+		if (w > 0.05) v.scale.x = w; if (d > 0.05) v.scale.y = d; if (isFinite(r)) v.rotation.z = r * Math.PI / 180;
+		lastSync = ""; status(`Caja: Z ${fmt(z0)} a ${fmt(z1)} m.`);
+	};
+
 	document.getElementById("btnBox").onclick = () => {
 		if (!pc) return;
-		const bb = pc.getBoundingBoxWorld();
-		// ubicar la caja sobre el muro más cercano al centro de la vista y alinearla con él
-		const t = viewer.scene.view.getPivot();
-		const W = pc.matrixWorld, v = new THREE.Vector3();
-		let best = null, bd = Infinity; const near = [];
-		for (const n of pc.visibleNodes) {
-			const pos = n.sceneNode && n.sceneNode.geometry.attributes.position; if (!pos) continue;
-			const a = pos.array, M = n.sceneNode.matrixWorld;
-			for (let i = 0; i < pos.count; i += 7) {
-				v.set(a[3*i], a[3*i+1], a[3*i+2]).applyMatrix4(M);
-				if (v.z < bb.min.z + 1.2) continue;   // ignorar el piso: buscar muro
-				const d = Math.hypot(v.x - t.x, v.y - t.y);
-				if (d < bd) { bd = d; best = v.clone(); }
-				near.push(v.x, v.y);
-			}
-		}
-		const c = best || t;
-		// dirección del muro: componente principal de los puntos a menos de 2 m
-		let sxx = 0, syy = 0, sxy = 0, mxs = 0, mys = 0, cnt = 0;
-		for (let i = 0; i < near.length; i += 2) { const dx = near[i]-c.x, dy = near[i+1]-c.y; if (dx*dx+dy*dy < 4) { mxs += dx; mys += dy; cnt++; } }
-		if (cnt) { mxs /= cnt; mys /= cnt; }
-		for (let i = 0; i < near.length; i += 2) { const dx = near[i]-c.x-mxs, dy = near[i+1]-c.y-mys; if (dx*dx+dy*dy < 4) { sxx += dx*dx; syy += dy*dy; sxy += dx*dy; } }
-		const ang = cnt > 10 ? 0.5 * Math.atan2(2*sxy, sxx - syy) : 0;
+		// caja alineada a los ejes que envuelve toda la nube (base horizontal)
+		const tb = pc.pcoGeometry.tightBoundingBox || pc.getBoundingBoxWorld();
+		const bb = tb.clone ? tb.clone().applyMatrix4(pc.matrixWorld) : tb;
+		const m = 0.2;
 		const vol = new Potree.BoxVolume();
 		vol.name = "Caja " + (viewer.scene.volumes.length + 1);
-		vol.position.set(c.x, c.y, (bb.min.z + bb.max.z) / 2);
-		vol.rotation.z = ang;
-		vol.scale.set(4, 1.0, (bb.max.z - bb.min.z) + 0.5);
+		vol.position.set((bb.min.x + bb.max.x) / 2, (bb.min.y + bb.max.y) / 2, (bb.min.z + bb.max.z) / 2);
+		vol.scale.set(bb.max.x - bb.min.x + 2*m, bb.max.y - bb.min.y + 2*m, bb.max.z - bb.min.z + 2*m);
 		viewer.scene.addVolume(vol);
 		viewer.inputHandler.toggleSelection(vol);
 		applyClipMode();
-		try { viewer.zoomTo(vol, 1.6); } catch(e) {}
-		status("Caja agregada. Ubicala y exportá (para alzados elegí «Alzado según la caja»).");
+		lastSync = "";
+		status("Caja agregada envolviendo toda la nube. Achicala/agrandala por cada cara con los cubos de color o con los valores de abajo.");
 	};
 
 	document.getElementById("btnDel").onclick = () => {
