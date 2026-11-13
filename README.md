@@ -9,7 +9,8 @@ La nube se ajustó en planta a los puntos de muro relevados con ET y en altura a
 No incluye Medianera5.
 
 **Cortes → DXF** (panel arriba a la derecha):
-- *Por sectores*: «1 · Marcar sector en planta» (dos clics en esquinas opuestas) y «2 · Cortar el sector a la cota Z»; sólo se lee esa parte de la nube.
+- *Por tramos de muro*: «1 · Marcar tramo de muro» (dos clics sobre la pared, desde cualquier vista) crea una caja alineada con el muro; «2 · Cortar el tramo a la cota Z» la reduce a la faja de corte. Sólo se lee esa parte de la nube.
+- *Zoom*: la rueda acerca hacia el punto bajo el cursor, hasta pocos centímetros de la pared.
 - *Corte horizontal de todo el predio*: planta a la cota Z (ET) y espesor elegidos (piso ≈ −0,5 m).
 - *Caja libre*: se crea horizontal envolviendo toda la nube; cada cubo de color mueve una sola cara (X, Y, arriba/abajo) y sólo gira sobre Z, así la base queda siempre horizontal. También se puede fijar Z inferior/superior, ancho, profundidad y giro con valores.
 - Proyecciones: Planta (X, Y), Alzado según la caja (distancia, altura) o 3D.
