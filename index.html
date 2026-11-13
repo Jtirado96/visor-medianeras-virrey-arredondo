@@ -22,6 +22,13 @@
 		#dxfstatus{margin-top:6px;font-size:12px;color:#ffd27a;min-height:16px}
 		#dxfpanel .min{position:absolute;top:8px;right:10px;cursor:pointer;color:#9aa;font-size:16px}
 		#dxfpanel.collapsed > :not(h3):not(.min){display:none}
+		#cortes{max-height:150px;overflow:auto;margin-bottom:6px}
+	.crow{display:flex;align-items:center;gap:6px;padding:3px 4px;border-radius:5px;cursor:pointer;font-size:12px}
+	.crow:hover{background:rgba(255,255,255,.06)}
+	.crow.on{background:rgba(0,255,0,.12);outline:1px solid rgba(0,255,0,.35)}
+	.crow .cname{font-weight:600;flex:0 0 auto}
+	.crow .cz{flex:1;opacity:.8}
+	#dxfpanel .crow .cdel{width:auto;flex:0 0 auto;padding:1px 7px;margin:0;background:#5a2a2a;font-size:12px}
 	</style>
 </head>
 <body>
@@ -71,6 +78,8 @@
 			</div>
 			<button id="btnBoxApply" class="sec" style="margin-top:6px">Aplicar valores a la caja</button>
 		</div>
+		<p style="margin:10px 0 4px"><b>Cortes</b> <span style="font-size:11px;opacity:.8">(el marcado es el que se edita y se exporta)</span></p>
+		<div id="cortes"></div>
 		<label><input type="checkbox" id="chkClip" checked> Mostrar solo lo que está dentro de la caja</label>
 		<div class="row">
 			<b>Proyección</b>
@@ -79,7 +88,7 @@
 			<label><input type="radio" name="proj" value="3d"> 3D (X, Y, Z)</label>
 		</div>
 		<button id="btnDxf">Exportar corte a DXF</button>
-		<button id="btnDel" class="sec">Borrar cajas de corte</button>
+		<button id="btnDel" class="sec" title="Borra todos los cortes">Borrar todos los cortes</button>
 		<div id="dxfstatus"></div>
 	</div>
 
@@ -191,7 +200,7 @@
 		const dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy);
 		if (L < 0.1) { status("Los dos puntos están demasiado cerca en planta; volvé a marcar el tramo."); return; }
 		const vol = new Potree.BoxVolume();
-		vol.name = "Tramo " + (viewer.scene.volumes.length + 1);
+		vol.name = "Tramo " + (++nCortes);
 		vol.position.set((a.x + b.x) / 2, (a.y + b.y) / 2, (bb.min.z + bb.max.z) / 2);
 		vol.rotation.z = Math.atan2(dy, dx);
 		vol.scale.set(L, 1.0, bb.max.z - bb.min.z + 0.4);
@@ -223,7 +232,7 @@
 		const t = Math.max(0.02, parseFloat(document.getElementById("inT").value) || 0.3);
 		const bb = pc.getBoundingBoxWorld();
 		const vol = new Potree.BoxVolume();
-		vol.name = `Corte horizontal Z=${h} m`;
+		vol.name = `Predio ${++nCortes} · Z=${h}`;
 		vol.position.set((bb.min.x + bb.max.x) / 2, (bb.min.y + bb.max.y) / 2, h);
 		vol.scale.set(bb.max.x - bb.min.x + 1, bb.max.y - bb.min.y + 1, t);
 		vol.userData.corte = true;
@@ -249,14 +258,56 @@
 			}
 			const cam = viewer.scene.getActiveCamera();   // plano de recorte cercano chico: poder acercarse a la pared
 			if (cam.isPerspectiveCamera && cam.near > 0.03) cam.near = 0.03;
+			trackVolumes();
 			syncBoxInputs();
 		});
 	})();
 
+	// ---------- lista de cortes: el corte activo es el que se edita y se exporta ----------
+	let nCortes = 0, activeVol = null, seenVols = new Set(), listSig = "";
 	function currentBox(){
+		const vs = viewer.scene.volumes;
+		if (activeVol && vs.includes(activeVol)) return activeVol;
+		activeVol = vs.length ? vs[vs.length - 1] : null; listSig = "";
+		return activeVol;
+	}
+	function setActive(v, select){
+		activeVol = v; listSig = ""; lastSync = "";
+		if (select && v) { viewer.inputHandler.deselectAll(); viewer.inputHandler.toggleSelection(v); }
+	}
+	function zr(v){ return `Z ${fmt(v.position.z - v.scale.z / 2)} a ${fmt(v.position.z + v.scale.z / 2)}`; }
+	function trackVolumes(){
+		const vs = viewer.scene.volumes;
+		for (const v of vs) if (!seenVols.has(v)) { seenVols.add(v); if (!v.name || /^box/i.test(v.name)) v.name = "Caja " + (++nCortes); activeVol = v; listSig = ""; }
 		const sel = viewer.inputHandler.selection.find(o => o instanceof Potree.BoxVolume);
-		if (sel) return sel;
-		const vs = viewer.scene.volumes; return vs.length ? vs[vs.length - 1] : null;
+		if (sel && sel !== activeVol) setActive(sel, false);
+		const act = currentBox();
+		const sig = vs.map(v => v.uuid + v.name + zr(v)).join("|") + "#" + (act ? act.uuid : "");
+		if (sig === listSig) return; listSig = sig;
+		for (const v of vs) {   // el activo en verde, los demás en gris
+			const on = v === act;
+			v.material.color.set(on ? 0x00ff00 : 0x9aa0a6); v.material.opacity = on ? 0.3 : 0.12;
+			v.frame.material.color.set(on ? 0xffff00 : 0x000000);
+		}
+		const ul = document.getElementById("cortes");
+		ul.innerHTML = vs.length ? "" : '<div style="opacity:.7;font-size:12px">Todavía no hay cortes.</div>';
+		for (const v of vs) {
+			const row = document.createElement("div");
+			row.className = "crow" + (v === act ? " on" : "");
+			row.innerHTML = `<input type="radio" name="cact" ${v === act ? "checked" : ""}><span class="cname"></span><span class="cz"></span><button class="cdel" title="Borrar este corte">✕</button>`;
+			row.querySelector(".cname").textContent = v.name.split(" · ")[0];
+			row.querySelector(".cz").textContent = zr(v);
+			row.onclick = e => { if (!e.target.classList.contains("cdel")) setActive(v, true); };
+			row.querySelector(".cdel").onclick = () => {
+				viewer.inputHandler.deselectAll(); viewer.scene.removeVolume(v); seenVols.delete(v);
+				if (activeVol === v) activeVol = null;
+				if (!viewer.scene.volumes.length) viewer.setClipTask(Potree.ClipTask.HIGHLIGHT);
+				listSig = ""; status(`Corte «${v.name.split(" · ")[0]}» borrado.`);
+			};
+			ul.appendChild(row);
+		}
+		const b = document.getElementById("btnDxf");
+		b.textContent = act ? `Exportar «${act.name.split(" · ")[0]}» a DXF` : "Exportar corte a DXF";
 	}
 	const fmt = x => x.toFixed(2);
 	let lastSync = "";
@@ -313,7 +364,7 @@
 		const bb = tb.clone ? tb.clone().applyMatrix4(pc.matrixWorld) : tb;
 		const m = 0.2;
 		const vol = new Potree.BoxVolume();
-		vol.name = "Caja " + (viewer.scene.volumes.length + 1);
+		vol.name = "Caja " + (++nCortes);
 		vol.position.set((bb.min.x + bb.max.x) / 2, (bb.min.y + bb.max.y) / 2, (bb.min.z + bb.max.z) / 2);
 		vol.scale.set(bb.max.x - bb.min.x + 2*m, bb.max.y - bb.min.y + 2*m, bb.max.z - bb.min.z + 2*m);
 		viewer.scene.addVolume(vol);
@@ -324,7 +375,9 @@
 	};
 
 	document.getElementById("btnDel").onclick = () => {
+		viewer.inputHandler.deselectAll();
 		for (const v of [...viewer.scene.volumes]) viewer.scene.removeVolume(v);
+		seenVols.clear(); activeVol = null; listSig = "";
 		viewer.setClipTask(Potree.ClipTask.HIGHLIGHT);
 		status("");
 	};
