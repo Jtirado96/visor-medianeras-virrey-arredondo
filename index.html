@@ -10,7 +10,7 @@
 	<link rel="stylesheet" type="text/css" href="libs/spectrum/spectrum.css">
 	<link rel="stylesheet" type="text/css" href="libs/jstree/themes/mixed/style.css">
 	<style>
-		#dxfpanel{position:absolute;top:12px;right:12px;z-index:10000;width:290px;background:rgba(25,32,40,.93);color:#eee;
+		#dxfpanel{position:absolute;top:12px;right:12px;z-index:10000;width:290px;max-height:calc(100vh - 24px);display:flex;flex-direction:column;box-sizing:border-box;background:rgba(25,32,40,.93);color:#eee;
 			font:13px/1.4 system-ui,Segoe UI,Arial,sans-serif;border-radius:8px;box-shadow:0 4px 18px rgba(0,0,0,.45);padding:12px 14px}
 		#dxfpanel h3{margin:0 0 6px;font-size:15px;color:#fff}
 		#dxfpanel p{margin:4px 0 8px;color:#bcc6d0;font-size:12px}
@@ -22,7 +22,13 @@
 		#dxfstatus{margin-top:6px;font-size:12px;color:#ffd27a;min-height:16px}
 		#dxfpanel .min{position:absolute;top:8px;right:10px;cursor:pointer;color:#9aa;font-size:16px}
 		#dxfpanel.collapsed > :not(h3):not(.min){display:none}
-		#cortes{max-height:150px;overflow:auto;margin-bottom:6px}
+		#dxfpanel .pbody{overflow-y:auto;flex:1 1 auto;min-height:0;margin-right:-6px;padding-right:6px}
+		#dxfpanel .pfoot{flex:0 0 auto;border-top:1px solid #3a4652;margin-top:6px;padding-top:4px}
+		#dxfpanel .sec-box{border:1px solid #3a4652;border-radius:6px;padding:7px 8px;margin:0 0 8px;background:rgba(255,255,255,.02)}
+		#dxfpanel .sec-box.accent{border-color:#2f6fb3;background:rgba(47,111,179,.12)}
+		#dxfpanel .sec-t{font-weight:700;color:#fff;margin-bottom:4px}
+		#dxfpanel .sec-box p{margin:2px 0 6px}
+		#cortes{max-height:140px;overflow:auto;margin-bottom:2px}
 	.crow{display:flex;align-items:center;gap:6px;padding:3px 4px;border-radius:5px;cursor:pointer;font-size:12px}
 	.crow:hover{background:rgba(255,255,255,.06)}
 	.crow.on{background:rgba(0,255,0,.12);outline:1px solid rgba(0,255,0,.35)}
@@ -53,43 +59,46 @@
 	<div id="dxfpanel">
 		<span class="min" id="dxfmin" title="Minimizar">–</span>
 		<h3>Cortes → DXF</h3>
-		<p><b>Corte horizontal</b> (planta a una cota Z del sistema ET; piso ≈ −0,5):</p>
-		<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px">
-			<span>Cota Z</span><input id="inH" type="number" step="0.1" value="0.9" style="width:58px"> m
-			<span>Espesor</span><input id="inT" type="number" step="0.05" value="0.3" style="width:52px"> m
-		</div>
-		<div id="zslide" style="display:none;margin:2px 0 6px">
-			<input id="inHr" type="range" min="-1" max="5.8" step="0.01" value="0.9" style="width:100%">
-			<div style="font-size:11px;opacity:.8">Mové el corte con este control o con <b>Shift + rueda</b> sobre la nube (1 cm por paso; Shift + Alt: 10 cm). También con la flecha azul de la caja.</div>
-		</div>
-		<p style="margin:6px 0 4px"><b>Trabajar por sectores:</b></p>
-		<button id="btnSector">1 · Marcar tramo de muro (2 clics)</button>
-		<button id="btnHorizSector" style="margin-top:4px">2 · Cortar el tramo a la cota Z</button>
-		<p style="font-size:11px">Mirando el muro de frente, hacé clic sobre la pared donde empieza y donde termina el tramo. Se crea una caja alineada con el muro (1 m de profundidad); cortala a la cota y exportá. Sólo se lee esa parte de la nube.</p>
-		<button id="btnHoriz" class="sec">Corte horizontal de todo el predio</button>
-		<p style="font-size:11px">El corte de todo el predio lee la nube completa: puede tardar 1–2 minutos.</p>
-		<p style="margin-top:10px"><b>Caja libre</b>: se crea horizontal envolviendo toda la nube. Cada cubo de color mueve <i>una sola cara</i> (rojo = X, verde = Y, azul = arriba/abajo); las flechas la trasladan y el anillo azul la gira sobre Z (la base siempre queda horizontal).</p>
-		<button id="btnBox" class="sec">Agregar caja libre</button>
-		<div id="boxlim" style="display:none;margin:6px 0 2px;padding:6px;border:1px solid #445;border-radius:6px">
-			<div style="display:grid;grid-template-columns:auto 64px auto 64px;gap:4px 6px;align-items:center">
-				<span>Z inferior</span><input id="bxZ0" type="text"><span>Z superior</span><input id="bxZ1" type="text">
-				<span>Largo (X)</span><input id="bxW" type="text"><span>Prof. (Y)</span><input id="bxD" type="text">
-				<span>Giro (°)</span><input id="bxR" type="text">
+		<div class="pbody">
+			<div class="sec-box">
+				<div class="sec-t">Cota del corte</div>
+				<div style="display:flex;gap:6px;align-items:center">
+					<span style="white-space:nowrap">Cota Z</span><input id="inH" type="number" step="0.1" value="0.9" style="width:58px"> m
+					<span>Espesor</span><input id="inT" type="number" step="0.05" value="0.3" style="width:52px"> m
+				</div>
+				<p style="margin:3px 0 0">Sistema ET; piso ≈ −0,5.</p>
+				<div id="zslide" style="display:none;margin:4px 0 0">
+					<input id="inHr" type="range" min="-1" max="5.8" step="0.01" value="0.9" style="width:100%">
+					<p style="margin:0">Mové el corte con este control o con <b>Shift + rueda</b> sobre la nube (1 cm; Shift + Alt: 10 cm).</p>
+				</div>
 			</div>
-			<button id="btnBoxApply" class="sec" style="margin-top:6px">Aplicar valores a la caja</button>
+			<div class="sec-box accent">
+				<div class="sec-t">Trabajar por tramos de muro</div>
+				<p>Mirando el muro de frente, hacé clic sobre la pared donde empieza y donde termina el tramo. Se crea una caja alineada con el muro (1 m de profundidad); después cortala a la cota y exportá. Sólo se lee esa parte de la nube.</p>
+				<button id="btnSector">1 · Marcar tramo de muro (2 clics)</button>
+				<button id="btnHorizSector">2 · Cortar el tramo a la cota Z</button>
+			</div>
+			<div class="sec-box">
+				<div class="sec-t">Todo el predio</div>
+				<button id="btnHoriz" class="sec">Corte horizontal de todo el predio</button>
+				<p style="margin:2px 0 0">Lee la nube completa: puede tardar 1–2 minutos.</p>
+			</div>
+			<div class="sec-box">
+				<div class="sec-t">Cortes <span style="font-weight:400;font-size:11px;opacity:.8">(el marcado se edita y se exporta)</span></div>
+				<div id="cortes"></div>
+				<button id="btnDel" class="sec" title="Borra todos los cortes">Borrar todos los cortes</button>
+				<label><input type="checkbox" id="chkClip" checked> Mostrar solo lo que está dentro del corte</label>
+			</div>
+			<div class="sec-box">
+				<div class="sec-t">Proyección</div>
+				<label style="display:inline-block;margin-right:14px"><input type="radio" name="proj" value="planta" checked> Planta XY</label>
+				<label style="display:inline-block"><input type="radio" name="proj" value="3d"> 3D</label>
+			</div>
 		</div>
-		<p style="margin:10px 0 4px"><b>Cortes</b> <span style="font-size:11px;opacity:.8">(el marcado es el que se edita y se exporta)</span></p>
-		<div id="cortes"></div>
-		<label><input type="checkbox" id="chkClip" checked> Mostrar solo lo que está dentro de la caja</label>
-		<div class="row">
-			<b>Proyección</b>
-			<label><input type="radio" name="proj" value="planta" checked> Planta (X, Y)</label>
-			<label><input type="radio" name="proj" value="alzado"> Alzado según la caja (distancia, altura)</label>
-			<label><input type="radio" name="proj" value="3d"> 3D (X, Y, Z)</label>
+		<div class="pfoot">
+			<button id="btnDxf">Exportar corte a DXF</button>
+			<div id="dxfstatus"></div>
 		</div>
-		<button id="btnDxf">Exportar corte a DXF</button>
-		<button id="btnDel" class="sec" title="Borra todos los cortes">Borrar todos los cortes</button>
-		<div id="dxfstatus"></div>
 	</div>
 
 	<script type="module">
@@ -207,7 +216,7 @@
 		viewer.scene.addVolume(vol);
 		viewer.inputHandler.toggleSelection(vol);
 		applyClipMode(); lastSync = "";
-		status(`Tramo marcado: ${fmt(L)} m de muro. Ajustalo si querés y tocá «2 · Cortar el tramo a la cota Z» (o exportá un alzado).`);
+		status(`Tramo marcado: ${fmt(L)} m de muro. Ahora tocá «2 · Cortar el tramo a la cota Z».`);
 	}, true);
 	document.getElementById("btnSector").onclick = () => {
 		if (!pc) return;
@@ -312,16 +321,12 @@
 	const fmt = x => x.toFixed(2);
 	let lastSync = "";
 	function syncBoxInputs(){
-		const v = currentBox(), el = document.getElementById("boxlim");
-		if (!v) { el.style.display = "none"; lastSync = ""; return; }
-		el.style.display = "";
+		const v = currentBox();
+		if (!v) { document.getElementById("zslide").style.display = "none"; lastSync = ""; return; }
 		const key = [v.uuid, v.position.x, v.position.y, v.position.z, v.scale.x, v.scale.y, v.scale.z, v.rotation.z].join();
 		if (key === lastSync) return; lastSync = key;
 		const act = document.activeElement;
 		const set = (id, val) => { const i = document.getElementById(id); if (i !== act) i.value = fmt(val); };
-		set("bxZ0", v.position.z - v.scale.z / 2); set("bxZ1", v.position.z + v.scale.z / 2);
-		set("bxW", v.scale.x); set("bxD", v.scale.y);
-		set("bxR", ((v.rotation.z * 180 / Math.PI) % 360 + 360) % 360);
 		const zs = document.getElementById("zslide");
 		if (v.userData.corte) {
 			zs.style.display = "";
@@ -347,7 +352,7 @@
 		const d = (ev.deltaY || ev.deltaX) < 0 ? 1 : -1;
 		moveCut(v.position.z + d * (ev.altKey ? 0.10 : 0.01));
 	}, { capture: true, passive: false });
-	document.getElementById("btnBoxApply").onclick = () => {
+	const _boxApply = () => {   // (caja libre eliminada del panel)
 		const v = currentBox(); if (!v) return;
 		const g = id => parseFloat(document.getElementById(id).value.replace(",", "."));
 		let z0 = g("bxZ0"), z1 = g("bxZ1"); if (!(z1 > z0)) { status("La Z superior debe ser mayor que la inferior."); return; }
@@ -357,7 +362,7 @@
 		lastSync = ""; status(`Caja: Z ${fmt(z0)} a ${fmt(z1)} m.`);
 	};
 
-	document.getElementById("btnBox").onclick = () => {
+	const _boxAdd = () => {   // (caja libre eliminada del panel)
 		if (!pc) return;
 		// caja alineada a los ejes que envuelve toda la nube (base horizontal)
 		const tb = pc.pcoGeometry.tightBoundingBox || pc.getBoundingBoxWorld();

@@ -14,8 +14,7 @@ No incluye Medianera5.
 - *Lista de cortes*: el corte marcado (verde) es el que se edita y se exporta; el botón de exportar muestra su nombre. Cada corte se borra con su ✕.
 - *Zoom*: la rueda acerca hacia el punto bajo el cursor, hasta pocos centímetros de la pared.
 - *Corte horizontal de todo el predio*: planta a la cota Z (ET) y espesor elegidos (piso ≈ −0,5 m).
-- *Caja libre*: se crea horizontal envolviendo toda la nube; cada cubo de color mueve una sola cara (X, Y, arriba/abajo) y sólo gira sobre Z, así la base queda siempre horizontal. También se puede fijar Z inferior/superior, ancho, profundidad y giro con valores.
-- Proyecciones: Planta (X, Y), Alzado según la caja (distancia, altura) o 3D.
+- Proyecciones: Planta XY o 3D.
 - El DXF se genera en el navegador a máxima resolución disponible (1 cm), raleado a 1 cm, como puntos en capa `CORTE_*`.
 
 Visor: [Potree](https://github.com/potree/potree) (licencia BSD-2, ver `POTREE_LICENSE`).
